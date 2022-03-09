@@ -86,7 +86,7 @@ foreach my $distro ( @distros ) {
 		system '/usr/bin/tar', '-xzf', $distro;
 		}
 
-	@result{qw(error output exit_code)} = do {
+	@result{qw(output error exit_code)} = do {
 		if( -e $result{dist_dir} ) {
 			chdir $result{dist_dir} or die "\tCould not change to <$result{dist_dir}>: $!";
 
