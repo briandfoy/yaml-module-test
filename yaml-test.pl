@@ -5,6 +5,7 @@ use experimental qw(signatures);
 
 use Cwd qw(getcwd);
 use File::Basename;
+use File::Path qw(make_path);
 use File::Spec::Functions;
 
 =head1 NAME
@@ -61,16 +62,20 @@ You may redistribute this under the terms of the Artistic License 2.0.
 
 =cut
 
-my @distros = glob( 'modules/*.gz' );
+my $repo_dir = getcwd();
 
-my $starting_dir   = getcwd();
-my $test_yaml_file = catfile( $starting_dir, $ARGV[0] );
+my $glob = catfile( $repo_dir, qw(modules *.gz) );
+my @distros = glob( $glob );
 
+my $build_dir      = catfile( $repo_dir, 'builds' );
+make_path $build_dir;
+
+my $test_yaml_file = catfile( $repo_dir, $ARGV[0] );
 die "Specify the file to test" unless defined $ARGV[0];
 
 my %hash;
 foreach my $distro ( @distros ) {
-	chdir $starting_dir;
+	chdir $build_dir or die "Could not change to build dir <$build_dir>";
 
 	my $dist_dir = basename($distro) =~ s/\.tar\.gz\z//r;
 	my $module = basename($dist_dir) =~ s/.*\K-.*//r =~ s/-/::/gr;
@@ -84,7 +89,10 @@ foreach my $distro ( @distros ) {
 
 	if( -e $dist_dir ) {
 		chdir $dist_dir or die "\tCould not change to <$dist_dir>: $!";
-		unless( make_dist() ) {
+
+		my( $output, $error, $exit ) = make_dist();
+		unless( $exit == 0 ) {
+			warn "$dist_dir ($exit) $error";
 			next;
 			}
 
@@ -98,28 +106,39 @@ foreach my $distro ( @distros ) {
 		warn "\tDist dir <$dist_dir> still does not exist";
 		}
 
-
 	printf "%3d %-20s %s\n", $hash{$dist_dir}{exit_code}, $dist_dir, $hash{$dist_dir}{error};
 	}
 
 sub make_dist () {
 	unless( -e 'blib/lib' ) {
 		local $ENV{PERL5LIB} = ".:$ENV{PERL5LIB}" if -e "inc";
-		if( -e 'Makefile.PL' ) {
-			system $^X, 'Makefile.PL' and die "\tCould not run Makefile.PL: $!";
-			system 'make';
+		my %t = (
+			'Build.PL'    => "./Build",
+			'Makefile.PL' => 'make',
+			);
+
+		my( $build_file ) = grep { -e } reverse sort keys %t;
+		unless( $build_file ) {
+			return( '', 'did not find a build file', 999 );
 			}
-		elsif( -e 'Build.PL' ) {
-			system $^X, 'Build.PL';
-			system './Build';
+
+		my $command = $t{$build_file};
+
+		my( $output, $error, $exit ) = run_command( [ $^X, $build_file ] );
+		if( $exit != 0 ) {
+			return ( $output, $error, $exit )
 			}
-		else {
-			warn "\tdid not find a build file";
-			return;
-			}
+
+		my @build = run_command( [ $command ] );
+
+		$output .= $build[0];
+		$error  .= $build[1];
+		$exit    = $build[2];
+
+		return( $output, $error, $exit );
 		}
 
-	return 1;
+	return ( '', '', 0 );
 	}
 
 sub run_command ( $command ) {
