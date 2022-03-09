@@ -73,40 +73,38 @@ make_path $build_dir;
 my $test_yaml_file = catfile( $repo_dir, $ARGV[0] );
 die "Specify the file to test" unless defined $ARGV[0];
 
-my %hash;
 foreach my $distro ( @distros ) {
 	chdir $build_dir or die "Could not change to build dir <$build_dir>";
 
 	my $dist_dir = basename($distro) =~ s/\.tar\.gz\z//r;
-	my $module = basename($dist_dir) =~ s/.*\K-.*//r =~ s/-/::/gr;
+	my %result = ( dist_dir => $dist_dir );
+
+	my $module = basename($result{dist_dir}) =~ s/.*\K-.*//r =~ s/-/::/gr;
 	$module = 'YAML::XS' if $module eq 'YAML::LibYAML';
 
-	unless( -e $dist_dir ) {
+	unless( -e $result{dist_dir} ) {
 		system '/usr/bin/tar', '-xzf', $distro;
 		}
 
-	$hash{$dist_dir}{exit_code} = '-';
+	@result{qw(error output exit_code)} = do {
+		if( -e $result{dist_dir} ) {
+			chdir $result{dist_dir} or die "\tCould not change to <$result{dist_dir}>: $!";
 
-	if( -e $dist_dir ) {
-		chdir $dist_dir or die "\tCould not change to <$dist_dir>: $!";
-
-		my( $output, $error, $exit ) = make_dist();
-		unless( $exit == 0 ) {
-			warn "$dist_dir ($exit) $error";
-			next;
+			my( $output, $error, $exit ) = make_dist();
+			if( $exit != 0 ) {
+				( $output, $error, $exit );
+				}
+			else {
+				my @command = ($^X, qw(-Iblib/lib -Iblib/lib/auto -Iblib/arch), "-M$module=LoadFile", '-e', 'LoadFile(shift)', $test_yaml_file );
+				( run_command( \@command ) );
+				}
 			}
+		else {
+			( '', "Dist dir <$result{dist_dir}> does not exist", -1 );
+			}
+		};
 
-		my @command = ($^X, qw(-Iblib/lib -Iblib/lib/auto -Iblib/arch), "-M$module=LoadFile", '-e', 'LoadFile(shift)', $test_yaml_file );
-		my( $output, $error, $exit_code ) = run_command( \@command );
-
-		$hash{$dist_dir}{exit_code} = $exit_code;
-		$hash{$dist_dir}{error} = $error // '';
-		}
-	else {
-		warn "\tDist dir <$dist_dir> still does not exist";
-		}
-
-	printf "%3d %-20s %s\n", $hash{$dist_dir}{exit_code}, $dist_dir, $hash{$dist_dir}{error};
+	printf "%3d %-20s %s\n", @result{qw(exit_code dist_dir error)};
 	}
 
 sub make_dist () {
