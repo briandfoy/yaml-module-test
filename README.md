@@ -23,3 +23,22 @@ There are some example YAML files in *examples*.
 ## See also
 
 * [YAML vs YAML::XS inconsistencies (YAML::Syck and YAML::Tiny too)](https://perlmaven.com/yaml-vs-yaml-xs-inconsistencies)
+
+## Notes on versions
+
+Some modules or versions aren't worth testing. You're unlikely to have
+ever used these.
+
+### YAML::PP
+
+* Versions before 0.04 did not have `LoadFile`
+
+### YAML::PP::LibYAML
+
+* Never really made much progress as a serious module
+
+### YAML::Tiny
+
+* Versions before 1.04 did not have `LoadFile`, so I don't include those.
+* Version 1.19 had an exporting problem, so I don't include that one
+
