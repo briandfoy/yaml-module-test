@@ -1,74 +1,110 @@
 #!/Users/brian/bin/perl
-use v5.10;
+use v5.18;
+use strict;
+use experimental qw(signatures);
 
 use Cwd qw(getcwd);
 use File::Basename;
-use Mojo::UserAgent;
+use File::Spec::Functions;
 
-# https://perlmaven.com/yaml-vs-yaml-xs-inconsistencies
+=head1 NAME
 
-my @distros = map { "https://cpan.metacpan.org/authors/id/$_" } qw(
-	T/TI/TINITA/YAML-1.30.tar.gz
-	T/TI/TINITA/YAML-1.29.tar.gz
-	T/TI/TINITA/YAML-1.28.tar.gz
-	T/TI/TINITA/YAML-1.27.tar.gz
-	T/TI/TINITA/YAML-1.26.tar.gz
-	T/TI/TINITA/YAML-1.25.tar.gz
-	T/TI/TINITA/YAML-1.24.tar.gz
-	I/IN/INGY/YAML-1.23.tar.gz
-	I/IN/INGY/YAML-1.22.tar.gz
-	I/IN/INGY/YAML-1.21.tar.gz
-	I/IN/INGY/YAML-1.20.tar.gz
-	TINITA/YAML-1.19.tar.gz
-	TINITA/YAML-1.18.tar.gz
-	TINITA/YAML-1.17.tar.gz
-	TODDR/YAML-Syck-1.34.tar.gz
-	TODDR/YAML-Syck-1.32.tar.gz
-	SMUELLER/YAML-Syck-1.19.tar.gz
-	T/TI/TINITA/YAML-LibYAML-0.83.tar.gz
-	T/TI/TINITA/YAML-LibYAML-0.82.tar.gz
-	T/TI/TINITA/YAML-LibYAML-0.81.tar.gz
-	T/TI/TINITA/YAML-LibYAML-0.80.tar.gz
-	INGY/YAML-LibYAML-0.74.tar.gz
-	E/ET/ETHER/YAML-Tiny-1.73.tar.gz
-	E/ET/ETHER/YAML-Tiny-1.72.tar.gz
-	A/AD/ADAMK/YAML-Tiny-1.51.tar.gz
-	);
+yaml-test.pl - see what Perl YAML modules work for the input
+
+=head1 SYNOPSIS
+
+	% yaml-test.pl some-file.yml
+
+=head1 DESCRIPTION
+
+The collection of Perl modules that deal with YAML act differently or
+implement different parts of the YAML spec. There are annoying differences
+even among different versions of the same module.
+
+I've been bit by this on more than a few projects. In an ideal world I'd
+get to change the input to suit the tool, but I don't always get to do
+that. I made this little program to figure out which module/version works
+for the input. Once I know that, I can specify the right prerequisites.
+
+=head2 How it works
+
+This program downloads, but does not install, several modules. It builds
+them then uses the modules directly from their distribution directories.
+
+=head1 TO DO
+
+* Make a list of differences in the modules
+
+=head1 SEE ALSO
+
+=over 4
+
+=item * https://perlmaven.com/yaml-vs-yaml-xs-inconsistencies
+
+=back
+
+=head1 SOURCE AVAILABILITY
+
+This source is in Github:
+
+	https://github.com/briandfoy/yaml-module-test
+
+=head1 AUTHOR
+
+brian d foy, C<< bdfoy@cpan.org >>
+
+=head1 COPYRIGHT AND LICENSE
+
+Copyright © 2021-2022, brian d foy, All Rights Reserved.
+
+You may redistribute this under the terms of the Artistic License 2.0.
+
+=cut
+
+my @distros = glob( 'modules/*.gz' );
 
 my $starting_dir   = getcwd();
-my $test_yaml_file = $ARGV[0];
+my $test_yaml_file = catfile( $starting_dir, $ARGV[0] );
+
 die "Specify the file to test" unless defined $ARGV[0];
 
-
-my $ua = Mojo::UserAgent->new;
-
+my %hash;
 foreach my $distro ( @distros ) {
-	my $tarball = basename($distro);
-	my $dist_dir = $tarball =~ s/\.tar\.gz\z//r;
-	my $module = $dist_dir =~ s/.*\K-.*//r =~ s/-/::/gr;
+	chdir $starting_dir;
+
+	my $dist_dir = basename($distro) =~ s/\.tar\.gz\z//r;
+	my $module = basename($dist_dir) =~ s/.*\K-.*//r =~ s/-/::/gr;
 	$module = 'YAML::XS' if $module eq 'YAML::LibYAML';
 
-	say "-" x 70;
-	say "TARBALL: $tarball DIST_DIR: $dist_dir MODULE: $module";
-
 	unless( -e $dist_dir ) {
-		unless( -e $tarball ) {
-			say "Downloading $distro";
-			$ua->get( $distro )->result->save_to( $tarball );
+		system '/usr/bin/tar', '-xzf', $distro;
+		}
+
+	$hash{$dist_dir}{exit_code} = '-';
+
+	if( -e $dist_dir ) {
+		chdir $dist_dir or die "\tCould not change to <$dist_dir>: $!";
+		unless( make_dist() ) {
+			next;
 			}
-		system '/usr/bin/tar', '-xzf', $tarball;
-		}
 
-	unless( -e $dist_dir ) {
+		my @command = ($^X, qw(-Iblib/lib -Iblib/lib/auto -Iblib/arch), "-M$module=LoadFile", '-e', 'LoadFile(shift)', $test_yaml_file );
+		my( $output, $error, $exit_code ) = run_command( \@command );
+
+		$hash{$dist_dir}{exit_code} = $exit_code;
+		$hash{$dist_dir}{error} = $error // '';
+		}
+	else {
 		warn "\tDist dir <$dist_dir> still does not exist";
-		$hash{$dist_dir} = '-';
-		next;
 		}
 
-	chdir $dist_dir or die "\tCould not change to <$dist_dir>: $!";
-	say "\tCurrent dir is <$dist_dir>";
 
+	printf "%3d %-20s %s\n", $hash{$dist_dir}{exit_code}, $dist_dir, $hash{$dist_dir}{error};
+	}
+
+sub make_dist () {
 	unless( -e 'blib/lib' ) {
+		local $ENV{PERL5LIB} = ".:$ENV{PERL5LIB}" if -e "inc";
 		if( -e 'Makefile.PL' ) {
 			system $^X, 'Makefile.PL' and die "\tCould not run Makefile.PL: $!";
 			system 'make';
@@ -79,24 +115,29 @@ foreach my $distro ( @distros ) {
 			}
 		else {
 			warn "\tdid not find a build file";
-			$hash{$dist_dir} = '?';
-			next;
+			return;
 			}
 		}
 
-	my @command = ($^X, qw(-Iblib/lib -Iblib/lib/auto -Iblib/arch), "-M$module=LoadFile", '-e', 'LoadFile(shift)', $test_yaml_file );
-	say "\tCOMMAND: @command";
-
-	$hash{$dist_dir} = system {$command[0]} @command;
-	$hash{$dist_dir} >> 8;
-
-	if( $hash{$dist_dir} ) {
-		say "\tcommand failed <$rc>";
-		}
-
-	chdir $starting_dir;
+	return 1;
 	}
 
-foreach my $module ( sort keys %hash ) {
-	printf "%5s %s\n", $hash{$module}, $module;
+sub run_command ( $command ) {
+	state $rc  = require IPC::Open3;
+	state $rc2 = require Symbol;
+
+	my( $in, $out );
+	my $err = Symbol::gensym();
+
+	my $pid = IPC::Open3::open3( $in, $out, $err, $command->@* );
+	close($in);
+	my $output = do { local $/; <$out> };
+	my $error  = do { local $/; <$err> };
+	$error =~ s/\s+\z//g;
+	$error =~ s/ at -e line 1\.//g;
+	$error =~ s/\s*\QBEGIN failed--compilation aborted.//g;
+	$error =~ s/\v+/ || /g;
+	waitpid($pid, 0);
+	my $exit_code = $? >> 8;
+	( $output, $error, $exit_code );
 	}
