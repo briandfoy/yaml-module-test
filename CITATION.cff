@@ -1,0 +1,16 @@
+abstract: YAML-test - try your YAML against a bunch of modules
+authors:
+- alias: briandfoy
+  family-names: foy
+  given-names: brian d
+  orcid: 0000-0002-0283-8283
+  email: brian.d.foy@gmail.com
+cff-version: 1.2.0
+date-released: 2022-01-27
+license: perl_5
+license-url: https://github.com/briandfoy/yaml-module-test/LICENSE
+message: The GitHub page for this module provides formatted citations
+repository-code: https://github.com/briandfoy/yaml-module-test
+title: The String::Sprintf Perl module
+type: software
+version: dev-1
