@@ -137,6 +137,8 @@ sub run_command ( $command ) {
 	$error =~ s/ at -e line 1\.//g;
 	$error =~ s/\s*\QBEGIN failed--compilation aborted.//g;
 	$error =~ s/\v+/ || /g;
+	$error =~ s/at blib\/lib.*line\s+\d+\.//;
+	$error =~ s/\s+/ /g;
 	waitpid($pid, 0);
 	my $exit_code = $? >> 8;
 	( $output, $error, $exit_code );
