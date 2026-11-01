@@ -56,7 +56,7 @@ brian d foy, C<< bdfoy@cpan.org >>
 
 =head1 COPYRIGHT AND LICENSE
 
-Copyright © 2021-2022, brian d foy, All Rights Reserved.
+Copyright © 2021-2023, brian d foy, All Rights Reserved.
 
 You may redistribute this under the terms of the Artistic License 2.0.
 
